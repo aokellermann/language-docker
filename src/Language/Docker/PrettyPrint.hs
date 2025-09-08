@@ -188,6 +188,7 @@ prettyPrintRunMount set =
             <> maybe mempty printSource bSource
             <> maybe mempty printFromImage bFromImage
             <> maybe mempty printReadOnly bReadOnly
+            <> maybe mempty printRelabel bRelabel
         CacheMount CacheOpts {..} ->
           "type=cache"
             <> printTarget cTarget
@@ -237,6 +238,10 @@ prettyPrintRunMount set =
     printReadOnly False = ",rw"
     printRequired True = ",required"
     printRequired False = mempty
+    printRelabel r = ",relabel="
+      <> case r of
+        RelabelShared -> printQuotable "shared"
+        RelabelPrivate -> printQuotable "private"
 
 prettyPrintRunNetwork :: Maybe RunNetwork -> Doc ann
 prettyPrintRunNetwork Nothing = mempty

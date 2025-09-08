@@ -1,7 +1,5 @@
 module Language.Docker.ParseExposeSpec where
 
-import Data.Default.Class (def)
-import qualified Data.Text as Text
 import Language.Docker.Syntax
 import TestHelper
 import Test.Hspec

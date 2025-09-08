@@ -31,6 +31,7 @@ data RunMountArg
   | MountArgType MountType
   | MountArgUid Text
   | MountArgGid Text
+  | MountArgRelabel Relabel
   deriving (Show)
 
 data MountType
@@ -87,11 +88,11 @@ runFlagMount = do
   args <- mountArgs `sepBy1` string ","
   mt <- parseTypeFromArgs args
   case mt of
-    Bind -> BindMount <$> (bindMount $ filter (not . isMountArgType) args)
-    Cache -> CacheMount <$> (cacheMount $ filter (not . isMountArgType) args)
-    Tmpfs -> TmpfsMount <$> (tmpfsMount $ filter (not . isMountArgType) args)
-    Secret -> SecretMount <$> (secretMount $ filter (not . isMountArgType) args)
-    Ssh -> SshMount <$> (secretMount $ filter (not . isMountArgType) args)
+    Bind -> BindMount <$> bindMount (filter (not . isMountArgType) args)
+    Cache -> CacheMount <$> cacheMount (filter (not . isMountArgType) args)
+    Tmpfs -> TmpfsMount <$> tmpfsMount (filter (not . isMountArgType) args)
+    Secret -> SecretMount <$> secretMount (filter (not . isMountArgType) args)
+    Ssh -> SshMount <$> secretMount (filter (not . isMountArgType) args)
 
 parseTypeFromArgs :: [RunMountArg] -> Parser MountType
 parseTypeFromArgs args =
@@ -101,8 +102,8 @@ parseTypeFromArgs args =
   -- input arguments and not consume any input.
   case filter isMountArgType args of
     [] -> Bind <$ notFollowedBy eof
-    [(MountArgType t)] -> t <$ notFollowedBy eof
-    _:_ -> fail $ "--mount with multiple `type` arguments"
+    [MountArgType t] -> t <$ notFollowedBy eof
+    _:_ -> fail "--mount with multiple `type` arguments"
 
 isMountArgType :: RunMountArg -> Bool
 isMountArgType (MountArgType _) = True
@@ -114,13 +115,14 @@ bindMount args =
     Left e -> customError e
     Right as -> return $ foldr bindOpts def as
   where
-    allowed = Set.fromList ["target", "source", "from", "ro"]
+    allowed = Set.fromList ["target", "source", "from", "ro", "relabel"]
     required = Set.singleton "target"
     bindOpts :: RunMountArg -> BindOpts -> BindOpts
     bindOpts (MountArgTarget path) bo = bo {bTarget = path}
     bindOpts (MountArgSource path) bo = bo {bSource = Just path}
     bindOpts (MountArgFromImage img) bo = bo {bFromImage = Just img}
     bindOpts (MountArgReadOnly ro) bo = bo {bReadOnly = Just ro}
+    bindOpts (MountArgRelabel re) bo = bo {bRelabel = Just re}
     bindOpts invalid _ = error $ "unhandled " <> show invalid <> " please report this bug"
 
 cacheMount :: [RunMountArg] -> Parser CacheOpts
@@ -204,6 +206,7 @@ mountArgs =
       mountArgId,
       mountArgMode,
       mountArgReadOnly,
+      mountArgRelabel,
       mountArgRequired,
       mountArgSharing,
       mountArgSource,
@@ -318,6 +321,12 @@ mountType =
 mountArgUid :: (?esc :: Char) => Parser RunMountArg
 mountArgUid = MountArgUid <$> key "uid" stringArg
 
+mountArgRelabel :: Parser RunMountArg
+mountArgRelabel = MountArgRelabel <$> key "relabel" relabel
+
+relabel :: Parser Relabel
+relabel = choice [RelabelShared <$ string "shared", RelabelPrivate <$ string "private"]
+
 toArgName :: RunMountArg -> Text
 toArgName (MountArgEnv _) = "env"
 toArgName (MountArgFromImage _) = "from"
@@ -331,3 +340,4 @@ toArgName (MountArgSource _) = "source"
 toArgName (MountArgTarget _) = "target"
 toArgName (MountArgType _) = "type"
 toArgName (MountArgUid _) = "uid"
+toArgName (MountArgRelabel _) = "relabel"
