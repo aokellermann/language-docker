@@ -28,7 +28,7 @@ data RunMountArg
   | MountArgSharing CacheSharing
   | MountArgSource SourcePath
   | MountArgTarget TargetPath
-  | MountArgType Text
+  | MountArgType MountType
   | MountArgUid Text
   | MountArgGid Text
   deriving (Show)
@@ -39,6 +39,7 @@ data MountType
   | Tmpfs
   | Secret
   | Ssh
+  deriving (Show)
 
 parseRun :: (?esc :: Char) => Parser (Instruction Text)
 parseRun = do
@@ -83,32 +84,29 @@ runFlagNetwork = do
 runFlagMount :: (?esc :: Char) => Parser RunMount
 runFlagMount = do
   void $ string "--mount="
-  maybeType <-
-    choice
-      [ string "type="
-          *> choice
-            [ Just Bind <$ string "bind",
-              Just Cache <$ string "cache",
-              Just Tmpfs <$ string "tmpfs",
-              Just Secret <$ string "secret",
-              Just Ssh <$ string "ssh"
-            ],
-        pure Nothing
-      ]
-  (mountType, args) <- return $
-    case maybeType of
-      Nothing -> (Bind, argsParser Bind)
-      Just Ssh -> (Ssh, choice [string "," *> argsParser Ssh, pure []])
-      Just t -> (t, string "," *> argsParser t)
-  case mountType of
-    Bind -> BindMount <$> (bindMount =<< args)
-    Cache -> CacheMount <$> (cacheMount =<< args)
-    Tmpfs -> TmpfsMount <$> (tmpfsMount =<< args)
-    Secret -> SecretMount <$> (secretMount =<< args)
-    Ssh -> SshMount <$> (secretMount =<< args)
+  args <- mountArgs `sepBy1` string ","
+  mt <- parseTypeFromArgs args
+  case mt of
+    Bind -> BindMount <$> (bindMount $ filter (not . isMountArgType) args)
+    Cache -> CacheMount <$> (cacheMount $ filter (not . isMountArgType) args)
+    Tmpfs -> TmpfsMount <$> (tmpfsMount $ filter (not . isMountArgType) args)
+    Secret -> SecretMount <$> (secretMount $ filter (not . isMountArgType) args)
+    Ssh -> SshMount <$> (secretMount $ filter (not . isMountArgType) args)
 
-argsParser :: (?esc :: Char) => MountType -> Parser [RunMountArg]
-argsParser mountType = mountChoices mountType `sepBy1` string ","
+parseTypeFromArgs :: [RunMountArg] -> Parser MountType
+parseTypeFromArgs args =
+  -- `notFollowedBy eof` is a trivially succeeding parser that isn't supposed to
+  -- consume any input here. It's a hack that converts a simple type into a
+  -- parser. This allows this function to emit parse errors after analyzing its
+  -- input arguments and not consume any input.
+  case filter isMountArgType args of
+    [] -> Bind <$ notFollowedBy eof
+    [(MountArgType t)] -> t <$ notFollowedBy eof
+    _:_ -> fail $ "--mount with multiple `type` arguments"
+
+isMountArgType :: RunMountArg -> Bool
+isMountArgType (MountArgType _) = True
+isMountArgType _ = False
 
 bindMount :: [RunMountArg] -> Parser BindOpts
 bindMount args =
@@ -188,6 +186,7 @@ validArgs typeName allowed required args =
         [] -> result
         missing -> Left $ MissingArgument missing
   where
+    checkValidArg :: RunMountArg -> (Either DockerfileError [RunMountArg], Set.Set Text) -> (Either DockerfileError [RunMountArg], Set.Set Text)
     checkValidArg _ x@(Left _, _) = x
     checkValidArg a (Right as, seen) =
       let name = toArgName a
@@ -196,38 +195,22 @@ validArgs typeName allowed required args =
             (_, True) -> (Left (DuplicateArgument name), seen)
             (True, False) -> (Right (a : as), Set.insert name seen)
 
-mountChoices :: (?esc :: Char) => MountType -> Parser RunMountArg
-mountChoices mountType =
-  choice $
-    case mountType of
-      Bind ->
-        [ mountArgTarget,
-          mountArgSource,
-          mountArgFromImage,
-          mountArgReadOnly
-        ]
-      Cache ->
-        [ mountArgTarget,
-          mountArgSource,
-          mountArgFromImage,
-          mountArgReadOnly,
-          mountArgId,
-          mountArgSharing,
-          mountArgMode,
-          mountArgUid,
-          mountArgGid
-        ]
-      Tmpfs -> [mountArgTarget]
-      _ -> -- Secret and Ssh
-        [ mountArgTarget,
-          mountArgId,
-          mountArgRequired,
-          mountArgSource,
-          mountArgMode,
-          mountArgUid,
-          mountArgGid,
-          mountArgEnv
-        ]
+mountArgs :: (?esc :: Char) => Parser RunMountArg
+mountArgs =
+  choice
+    [ mountArgEnv,
+      mountArgFromImage,
+      mountArgGid,
+      mountArgId,
+      mountArgMode,
+      mountArgReadOnly,
+      mountArgRequired,
+      mountArgSharing,
+      mountArgSource,
+      mountArgTarget,
+      mountArgType,
+      mountArgUid
+    ]
 
 stringArg :: (?esc :: Char) => Parser Text
 stringArg = choice [doubleQuotedString, someUnless "a string" (== ',')]
@@ -318,6 +301,19 @@ mountArgTarget :: (?esc :: Char) => Parser RunMountArg
 mountArgTarget = do
   label "target=" $ choice [string "target=", string "dst=", string "destination="]
   MountArgTarget . TargetPath <$> stringArg
+
+mountArgType :: Parser RunMountArg
+mountArgType = MountArgType <$> key "type" mountType
+
+mountType :: Parser MountType
+mountType =
+  choice
+    [ Bind <$ string "bind",
+      Cache <$ string "cache",
+      Tmpfs <$ string "tmpfs",
+      Secret <$ string "secret",
+      Ssh <$ string "ssh"
+    ]
 
 mountArgUid :: (?esc :: Char) => Parser RunMountArg
 mountArgUid = MountArgUid <$> key "uid" stringArg

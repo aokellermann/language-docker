@@ -72,10 +72,72 @@ spec = do
               Run $ RunArgs (ArgumentsText "echo foo") flags2,
               Run $ RunArgs (ArgumentsText "echo foo") flags3
             ]
+
+    it "--mount=type=cache with id from variable/arg" $
+      let file =
+            Text.unlines
+              [ "ARG debian_version=12",
+                "FROM debian:bookworm-slim",
+                "RUN --mount=id=debian:${debian_version},type=cache,target=/foo foo bar"
+              ]
+          flags = def {mount = Set.singleton $ CacheMount (def {cTarget = "/foo", cCacheId = Just "debian:${debian_version}"})}
+       in assertAst
+            file
+            [ Arg "debian_version" (Just "12"),
+              From $ BaseImage
+                        { image = Image
+                                    { registryName = Nothing,
+                                      imageName="debian"
+                                    },
+                          tag = Just Tag { unTag="bookworm-slim" },
+                          digest = Nothing,
+                          alias = Nothing,
+                          platform = Nothing
+                        },
+              Run $ RunArgs (ArgumentsText "foo bar") flags
+            ]
+
+    it "--mount=type=cache,dst=/foo" $
+      let file = Text.unlines [ "RUN --mount=type=cache,dst=/foo echo foo" ]
+          flags = def {mount = Set.singleton $ CacheMount (def {cTarget = "/foo"})}
+       in assertAst file [ Run $ RunArgs (ArgumentsText "echo foo") flags ]
+
+    it "--mount=dst=/foo,type=cache" $
+      let file = Text.unlines [ "RUN --mount=dst=/foo,type=cache echo foo" ]
+          flags = def {mount = Set.singleton $ CacheMount (def {cTarget = "/foo"})}
+       in assertAst file [ Run $ RunArgs (ArgumentsText "echo foo") flags ]
+
     it "--mount=type=cache with all modifiers" $
       let file =
             Text.unlines
               [ "RUN --mount=type=cache,target=/foo,sharing=private,id=a,ro,from=ubuntu,source=/bar,mode=0700,uid=0,gid=0 echo foo"
+              ]
+          flags =
+            def
+              { mount =
+                  Set.singleton $
+                    CacheMount
+                      ( def
+                          { cTarget = "/foo",
+                            cSharing = Just Private,
+                            cCacheId = Just "a",
+                            cReadOnly = Just True,
+                            cFromImage = Just "ubuntu",
+                            cSource = Just "/bar",
+                            cMode = Just "0700",
+                            cUid = Just "0",
+                            cGid = Just "0"
+                          }
+                      )
+              }
+       in assertAst
+            file
+            [ Run $ RunArgs (ArgumentsText "echo foo") flags
+            ]
+    it "--mount=type=cache with all modifiers, different order" $
+      let file =
+            Text.unlines
+              [ "RUN --mount=readonly,sharing=private,id=a,type=cache,from=ubuntu,source=/bar,destination=/foo,mode=0700,uid=0,gid=0 echo foo"
               ]
           flags =
             def
@@ -639,3 +701,8 @@ spec = do
             file
             [ Run $ RunArgs ( ArgumentsText "ls &&  cat" ) flags
             ]
+
+  describe "Parse RUN instructions - invalid cases" $ do
+    it "fail because of multiple types in --mount" $
+      let line = "RUN --mount=type=cache,type=tmpfs,target=/foo foo bar"
+       in expectFail line
