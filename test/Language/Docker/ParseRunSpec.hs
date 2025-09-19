@@ -50,8 +50,8 @@ spec = do
             [ Run $ RunArgs (ArgumentsText "echo foo") flags
             ]
     it "--mount=type=bind all modifiers" $
-      let file = Text.unlines ["RUN --mount=type=bind,target=/foo,source=/bar,from=ubuntu,ro echo foo"]
-          flags = def {mount = Set.singleton $ BindMount (BindOpts {bTarget = "/foo", bSource = Just "/bar", bFromImage = Just "ubuntu", bReadOnly = Just True})}
+      let file = Text.unlines ["RUN --mount=type=bind,target=/foo,source=/bar,from=ubuntu,ro,relabel=shared echo foo"]
+          flags = def {mount = Set.singleton $ BindMount (BindOpts {bTarget = "/foo", bSource = Just "/bar", bFromImage = Just "ubuntu", bReadOnly = Just True, bRelabel = Just RelabelShared})}
        in assertAst
             file
             [ Run $ RunArgs (ArgumentsText "echo foo") flags
@@ -706,3 +706,31 @@ spec = do
     it "fail because of multiple types in --mount" $
       let line = "RUN --mount=type=cache,type=tmpfs,target=/foo foo bar"
        in expectFail line
+
+  describe "Parse RUN instructions - SELinux relabeling" $ do
+    let flagsRelabelShared =
+          def { mount = Set.singleton $
+                  BindMount
+                    ( def
+                        { bTarget = "/bar",
+                          bRelabel = Just RelabelShared
+                        }
+                    )
+              }
+        flagsRelabelPrivate =
+          def { mount = Set.singleton $
+                  BindMount
+                    ( def
+                        { bTarget = "/bar",
+                          bRelabel = Just RelabelPrivate
+                        }
+                    )
+              }
+    it "RUN with --relabel=shared" $
+      let file = Text.unlines
+            ["RUN --mount=type=bind,target=/bar,relabel=shared echo foo"]
+       in assertAst file [ Run $ RunArgs (ArgumentsText "echo foo") flagsRelabelShared ]
+    it "RUN with --relabel=private" $
+      let file = Text.unlines
+            ["RUN --mount=type=bind,target=/bar,relabel=private echo foo"]
+       in assertAst file [ Run $ RunArgs (ArgumentsText "echo foo") flagsRelabelPrivate ]

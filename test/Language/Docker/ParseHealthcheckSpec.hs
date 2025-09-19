@@ -1,10 +1,8 @@
 module Language.Docker.ParseHealthcheckSpec where
 
-import Data.Default.Class (def)
 import Language.Docker.Syntax
 import Test.Hspec
 import TestHelper
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 
 

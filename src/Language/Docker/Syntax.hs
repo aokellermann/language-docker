@@ -119,6 +119,11 @@ newtype TargetPath
       }
   deriving (Show, Eq, Ord, IsString)
 
+data Relabel
+  = RelabelShared
+  | RelabelPrivate
+  deriving (Show, Eq, Ord)
+
 data Checksum
   = Checksum !Text
   | NoChecksum
@@ -271,12 +276,13 @@ data BindOpts
       { bTarget :: !TargetPath,
         bSource :: !(Maybe SourcePath),
         bFromImage :: !(Maybe Text),
-        bReadOnly :: !(Maybe Bool)
+        bReadOnly :: !(Maybe Bool),
+        bRelabel :: !(Maybe Relabel)
       }
   deriving (Show, Eq, Ord)
 
 instance Default BindOpts where
-  def = BindOpts "" Nothing Nothing Nothing
+  def = BindOpts "" Nothing Nothing Nothing Nothing
 
 data CacheOpts
   = CacheOpts
