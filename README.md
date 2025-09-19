@@ -1,4 +1,4 @@
-[![Build Status][travis-img]][travis]
+[![Build Status][actions-img]][actions]
 [![Hackage][hackage-img]][hackage]
 [![GPL-3 licensed][license-img]][license]
 
@@ -37,7 +37,7 @@ Use the [dockerfile-creator package](https://github.com/hadolint/dockerfile-crea
 
 [hackage-img]: https://img.shields.io/hackage/v/language-docker.svg
 [hackage]: https://hackage.haskell.org/package/language-docker
-[travis-img]: https://travis-ci.org/hadolint/language-docker.svg?branch=master
-[travis]: https://travis-ci.org/hadolint/language-docker
+[actions-img]: https://github.com/hadolint/language-docker/actions/workflows/haskell.yml/badge.svg
+[actions]: https://github.com/hadolint/language-docker/actions/workflows/haskell.yml
 [license-img]: https://img.shields.io/badge/license-GPL--3-blue.svg
 [license]: https://tldrlegal.com/license/gnu-general-public-license-v3-(gpl-3)
